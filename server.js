@@ -1,13 +1,13 @@
-// GiftsUP «Ракетка»: общий раунд для всех игроков.
-// Запуск: npm i && PORT=8080 BOT_TOKEN=123:abc node server.js
 const crypto = require('crypto');
 const { WebSocketServer } = require('ws');
 
 const PORT = +process.env.PORT || 8080;
 const BOT_TOKEN = process.env.BOT_TOKEN || '';
 const SPEED = 0.17;
-const WAIT_MS = +process.env.WAIT_MS || 6000, PAUSE_MS = 3500;
-const MIN_BET = 1, MAX_BET = 100000;
+const WAIT_MS = +process.env.WAIT_MS || 6000;
+const PAUSE_MS = 3500;
+const MIN_BET = 1;
+const MAX_BET = 100000;
 
 const sha = s => crypto.createHash('sha256').update(s).digest('hex');
 
@@ -19,13 +19,27 @@ function crashFrom(seed) {
 function verifyInit(initData) {
   try {
     if (!BOT_TOKEN || !initData) return null;
-    const p = new URLSearchParams(initData), hash = p.get('hash');
+
+    const p = new URLSearchParams(initData);
+    const hash = p.get('hash');
     p.delete('hash');
-    const str = [...p.entries()].map(([k, v]) => `${k}=${v}`).sort().join('\n');
-    const key = crypto.createHmac('sha256', 'WebAppData').update(BOT_TOKEN).digest();
-    if (crypto.createHmac('sha256', key).update(str).digest('hex') !== hash) return null;
+
+    const str = [...p.entries()]
+      .map(([k, v]) => `${k}=${v}`)
+      .sort()
+      .join('\n');
+
+    const key = crypto.createHmac('sha256', 'WebAppData')
+      .update(BOT_TOKEN)
+      .digest();
+
+    if (crypto.createHmac('sha256', key).update(str).digest('hex') !== hash) {
+      return null;
+    }
+
     const u = JSON.parse(p.get('user'));
     const nm = u.username ? '@' + u.username : (u.first_name || 'user');
+
     return { id: 'tg' + u.id, nm };
   } catch {
     return null;
@@ -42,29 +56,40 @@ const httpServer = http.createServer((req, res) => {
 const wss = new WebSocketServer({ server: httpServer });
 httpServer.listen(PORT, '0.0.0.0');
 
-let round = null, hist = [];
+let round = null;
+let hist = [];
+
 const clients = new Set();
 
-const send = (ws, o) => ws.readyState === 1 && ws.send(JSON.stringify(o));
+const send = (ws, o) =>
+  ws.readyState === 1 && ws.send(JSON.stringify(o));
+
 const all = o => clients.forEach(c => send(c, o));
 
 const list = () => round
   ? [...round.bets.values()].map(b => ({
-      id: b.id, nm: b.nm, bet: b.amount, gb: b.gb, m: b.m
+      id: b.id,
+      nm: b.nm,
+      bet: b.amount,
+      gb: b.gb,
+      m: b.m
     }))
   : [];
 
 let pt = null;
 
 const pushPlayers = () => {
-  if (!pt) pt = setTimeout(() => {
-    pt = null;
-    all({ t: 'players', list: list() });
-  }, 250);
+  if (!pt) {
+    pt = setTimeout(() => {
+      pt = null;
+      all({ t: 'players', list: list() });
+    }, 250);
+  }
 };
 
 function startRound() {
   const seed = crypto.randomBytes(16).toString('hex');
+
   round = {
     seed,
     hash: sha(seed),
@@ -74,33 +99,53 @@ function startRound() {
     startAt: Date.now() + WAIT_MS
   };
 
-  all({ t: 'wait', hash: round.hash, startAt: round.startAt });
+  all({
+    t: 'wait',
+    hash: round.hash,
+    startAt: round.startAt
+  });
+
   setTimeout(fly, WAIT_MS);
 }
 
 function fly() {
   round.phase = 'fly';
   round.flyAt = Date.now();
-  all({ t: 'fly', startAt: round.flyAt });
+
+  all({
+    t: 'fly',
+    startAt: round.flyAt
+  });
+
   setTimeout(crash, Math.log(round.point) / SPEED * 1000);
 }
 
 function crash() {
   round.phase = 'crash';
+
   hist = [round.point, ...hist].slice(0, 14);
-  all({ t: 'crash', point: round.point, seed: round.seed, hist });
+
+  all({
+    t: 'crash',
+    point: round.point,
+    seed: round.seed,
+    hist
+  });
+
   setTimeout(startRound, PAUSE_MS);
 }
 
 // ===== АРЕНА =====
 
-const AR_BET = +process.env.AR_BET_MS || 10000;
+const AR_BET = 30000;
 const AR_SPIN = +process.env.AR_SPIN_MS || 6500;
 const AR_RES = +process.env.AR_RES_MS || 5500;
 
-const AR_COOLDOWN = 30000;
-const AR_PRIZE = .85, AR_JP = .10;
-const AR_MIN = 1, AR_MAX = 100000, AR_PLAYERS = 40;
+const AR_PRIZE = .85;
+const AR_JP = .10;
+const AR_MIN = 1;
+const AR_MAX = 100000;
+const AR_PLAYERS = 40;
 
 const A = {
   n: 0,
@@ -115,7 +160,10 @@ const A = {
 };
 
 const arList = () => [...A.bets.values()].map(b => ({
-  id: b.id, nm: b.nm, bet: b.bet, c: b.c
+  id: b.id,
+  nm: b.nm,
+  bet: b.bet,
+  c: b.c
 }));
 
 const arState = () => ({
@@ -133,10 +181,16 @@ const arState = () => ({
 let apt = null;
 
 const arPush = () => {
-  if (!apt) apt = setTimeout(() => {
-    apt = null;
-    all({ t: 'ar_players', jp: A.jp, list: arList() });
-  }, 250);
+  if (!apt) {
+    apt = setTimeout(() => {
+      apt = null;
+      all({
+        t: 'ar_players',
+        jp: A.jp,
+        list: arList()
+      });
+    }, 250);
+  }
 };
 
 function arStart() {
@@ -148,6 +202,7 @@ function arStart() {
   A.winner = null;
   A.off = Math.random() * 4;
   A.end = 0;
+
   all(arState());
 }
 
@@ -156,21 +211,31 @@ function arClose() {
     for (const b of A.bets.values()) {
       clients.forEach(c => {
         if (c.user.id === b.id) {
-          send(c, { t: 'ar_refund', amount: b.bet });
+          send(c, {
+            t: 'ar_refund',
+            amount: b.bet
+          });
         }
       });
     }
+
     return arStart();
   }
 
   const list = arList();
   const pot = list.reduce((a, p) => a + p.bet, 0);
-  const r = parseInt(sha(A.seed + ':arena').slice(0, 13), 16) / 2 ** 52 * pot;
 
-  let acc = 0, w = list[list.length - 1];
+  const r = parseInt(
+    sha(A.seed + ':arena').slice(0, 13),
+    16
+  ) / 2 ** 52 * pot;
+
+  let acc = 0;
+  let w = list[list.length - 1];
 
   for (const p of list) {
     acc += p.bet;
+
     if (r < acc) {
       w = p;
       break;
@@ -192,7 +257,9 @@ function arClose() {
 
   if (A.n % 100 === 0) A.jp = 0;
 
-  setTimeout(arStart, AR_SPIN + AR_RES + AR_COOLDOWN);
+  // Следующий раунд начинается после прокрутки и показа результата.
+  // Дополнительного 30-секундного ожидания нет.
+  setTimeout(arStart, AR_SPIN + AR_RES);
 }
 
 function arBet(ws, m) {
@@ -205,7 +272,12 @@ function arBet(ws, m) {
       refund: a > 0 ? a : 0,
       msg
     });
-    send(ws, { t: 'ar_players', jp: A.jp, list: arList() });
+
+    send(ws, {
+      t: 'ar_players',
+      jp: A.jp,
+      list: arList()
+    });
   };
 
   if (!(a >= AR_MIN && a <= AR_MAX)) {
@@ -225,23 +297,34 @@ function arBet(ws, m) {
 
     const used = new Set([...A.bets.values()].map(x => x.c));
     let c = 0;
+
     while (used.has(c)) c++;
 
-    b = { id, nm: ws.user.nm, bet: 0, c };
+    b = {
+      id,
+      nm: ws.user.nm,
+      bet: 0,
+      c
+    };
+
     A.bets.set(id, b);
   }
 
   b.bet = Math.round((b.bet + a) * 100) / 100;
 
-  // Отсчёт начинается после ставок двух разных игроков.
+  // Таймер 30 секунд запускается только после ставок двух разных игроков.
   if (A.bets.size >= 2 && A.end === 0) {
     A.end = Date.now() + AR_BET;
+
     all(arState());
+
     setTimeout(arClose, AR_BET);
   }
 
   arPush();
 }
+
+// ===== ПОДКЛЮЧЕНИЯ =====
 
 wss.on('connection', ws => {
   ws.user = {
@@ -251,11 +334,19 @@ wss.on('connection', ws => {
   ws.user.nm = 'Guest_' + ws.user.id.slice(1, 5);
 
   ws.msgs = 0;
-  const rl = setInterval(() => ws.msgs = 0, 1000);
+
+  const rl = setInterval(() => {
+    ws.msgs = 0;
+  }, 1000);
 
   clients.add(ws);
 
-  send(ws, { t: 'hi', id: ws.user.id, now: Date.now(), hist });
+  send(ws, {
+    t: 'hi',
+    id: ws.user.id,
+    now: Date.now(),
+    hist
+  });
 
   if (round) {
     send(ws, {
@@ -265,10 +356,16 @@ wss.on('connection', ws => {
     });
 
     if (round.phase === 'fly') {
-      send(ws, { t: 'fly', startAt: round.flyAt });
+      send(ws, {
+        t: 'fly',
+        startAt: round.flyAt
+      });
     }
 
-    send(ws, { t: 'players', list: list() });
+    send(ws, {
+      t: 'players',
+      list: list()
+    });
   }
 
   send(ws, arState());
@@ -277,6 +374,7 @@ wss.on('connection', ws => {
     if (++ws.msgs > 20) return;
 
     let m;
+
     try {
       m = JSON.parse(raw);
     } catch {
@@ -286,19 +384,23 @@ wss.on('connection', ws => {
     const id = ws.user.id;
 
     if (m.t === 'ar_bet') return arBet(ws, m);
-    if (m.t === 'ar_sync') return send(ws, arState());
+
+    if (m.t === 'ar_sync') {
+      return send(ws, arState());
+    }
 
     if (m.t === 'hello') {
       const u = verifyInit(m.initData);
 
       if (u) {
         clients.forEach(c => {
-          if (c !== ws && c.user.id === u.id) c.close();
+          if (c !== ws && c.user.id === u.id) {
+            c.close();
+          }
         });
 
         ws.user = u;
 
-        // Обновляем имя, если авторизация произошла после ставки.
         const crashBet = round && round.bets.get(u.id);
         if (crashBet) crashBet.nm = u.nm;
 
@@ -364,8 +466,17 @@ wss.on('connection', ws => {
       if (mult >= round.point) return;
 
       b.m = mult;
-      send(ws, { t: 'cashed', m: mult });
-      all({ t: 'out', id, m: mult });
+
+      send(ws, {
+        t: 'cashed',
+        m: mult
+      });
+
+      all({
+        t: 'out',
+        id,
+        m: mult
+      });
     }
   });
 
