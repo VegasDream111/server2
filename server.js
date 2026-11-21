@@ -19,8 +19,7 @@ function crashFrom(seed) {
 function verifyInit(initData) {
   try {
     if (!BOT_TOKEN || !initData) return null;
-    const p = new URLSearchParams(initData);
-    const hash = p.get('hash');
+    const p = new URLSearchParams(initData), hash = p.get('hash');
     p.delete('hash');
     const str = [...p.entries()].map(([k, v]) => `${k}=${v}`).sort().join('\n');
     const key = crypto.createHmac('sha256', 'WebAppData').update(BOT_TOKEN).digest();
@@ -39,13 +38,12 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 
-// Хранилище данных
+// Хранение JSON-файлов
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data');
 const PROMO_FILE = path.join(DATA_DIR, 'promos.json');
 const REFERRAL_FILE = path.join(DATA_DIR, 'referrals.json');
 const STATS_FILE = path.join(DATA_DIR, 'stats.json');
 
-// ===== СТАТИСТИКА =====
 let statsStore = { users: {}, caseOpens: 0, events: [] };
 
 try {
@@ -64,14 +62,13 @@ function saveStats() {
   fs.renameSync(tmp, STATS_FILE);
 }
 
-// ===== РЕФЕРАЛЬНАЯ СИСТЕМА =====
-const BOT_USERNAME = String(process.env.BOT_USERNAME || '').replace(/^@/, '').trim();
+const BOT_USERNAME = String(process.env.BOT_USERNAME || '')
+  .replace(/^@/, '').trim();
 
 let referralStore = { users: {} };
 
 try {
   fs.mkdirSync(DATA_DIR, { recursive: true });
-
   if (fs.existsSync(REFERRAL_FILE)) {
     const parsed = JSON.parse(fs.readFileSync(REFERRAL_FILE, 'utf8'));
     if (parsed && parsed.users && typeof parsed.users === 'object') {
@@ -109,7 +106,6 @@ function referralApi(req, res, url) {
   if (url.pathname === '/api/referral/register' && req.method === 'POST') {
     return readBody(req).then(body => {
       const user = verifyInit(body.initData);
-
       if (!user) {
         return reply(res, 401, {
           ok: false,
@@ -128,7 +124,6 @@ function referralApi(req, res, url) {
         if (inviterEntry && inviterEntry[0] !== user.id) {
           const [inviterId, inviter] = inviterEntry;
           me.referredBy = inviterId;
-
           if (!inviter.invited.includes(user.id)) {
             inviter.invited.push(user.id);
           }
@@ -162,7 +157,6 @@ function referralApi(req, res, url) {
   if (url.pathname === '/api/referral/claim' && req.method === 'POST') {
     return readBody(req).then(body => {
       const user = verifyInit(body.initData);
-
       if (!user) {
         return reply(res, 401, {
           ok: false,
@@ -171,13 +165,11 @@ function referralApi(req, res, url) {
       }
 
       const me = referralStore.users[user.id];
-
       if (!me || !me.referredBy || me.rewarded) {
         return reply(res, 200, { ok: true, granted: false });
       }
 
       const inviter = referralStore.users[me.referredBy];
-
       if (!inviter || !inviter.invited.includes(user.id)) {
         return reply(res, 200, { ok: true, granted: false });
       }
@@ -194,7 +186,6 @@ function referralApi(req, res, url) {
         me.earned -= 100;
         inviter.pending -= 100;
         inviter.earned -= 100;
-
         return reply(res, 500, {
           ok: false,
           error: 'Не удалось сохранить награду'
@@ -212,7 +203,6 @@ function referralApi(req, res, url) {
   if (url.pathname === '/api/referral/collect' && req.method === 'POST') {
     return readBody(req).then(body => {
       const user = verifyInit(body.initData);
-
       if (!user) {
         return reply(res, 401, {
           ok: false,
@@ -221,7 +211,6 @@ function referralApi(req, res, url) {
       }
 
       const me = referralStore.users[user.id];
-
       if (!me || !me.pending) {
         return reply(res, 200, { ok: true, amount: 0 });
       }
@@ -245,8 +234,6 @@ function referralApi(req, res, url) {
 
   return false;
 }
-
-// ===== АДМИН-ПАНЕЛЬ =====
 const ADMIN_KEY = process.env.ADMIN_KEY || '';
 const adminSessions = new Map();
 
@@ -254,7 +241,6 @@ let promoStore = { promos: {} };
 
 try {
   fs.mkdirSync(DATA_DIR, { recursive: true });
-
   if (fs.existsSync(PROMO_FILE)) {
     const parsed = JSON.parse(fs.readFileSync(PROMO_FILE, 'utf8'));
     if (parsed && parsed.promos && typeof parsed.promos === 'object') {
@@ -277,21 +263,16 @@ function savePromos() {
 function safeEqual(a, b) {
   const x = Buffer.from(String(a || ''));
   const y = Buffer.from(String(b || ''));
-
-  return x.length === y.length &&
-    x.length > 0 &&
-    crypto.timingSafeEqual(x, y);
+  return x.length === y.length && x.length > 0 && crypto.timingSafeEqual(x, y);
 }
 
 function readBody(req) {
   return new Promise((resolve, reject) => {
     let data = '';
-
     req.on('data', c => {
       data += c;
       if (data.length > 65536) reject(new Error('body too large'));
     });
-
     req.on('end', () => {
       try {
         resolve(data ? JSON.parse(data) : {});
@@ -299,7 +280,6 @@ function readBody(req) {
         reject(new Error('invalid json'));
       }
     });
-
     req.on('error', reject);
   });
 }
@@ -312,14 +292,12 @@ function reply(res, status, payload) {
     'access-control-allow-headers': 'content-type, authorization',
     'access-control-allow-methods': 'GET, POST, OPTIONS'
   });
-
   res.end(JSON.stringify(payload));
 }
 
 function getAdmin(req) {
   const token = String(req.headers.authorization || '')
     .replace(/^Bearer\s+/i, '');
-
   const session = adminSessions.get(token);
 
   if (!session || session.expires < Date.now()) {
@@ -330,11 +308,8 @@ function getAdmin(req) {
   return session;
 }
 
-// ===== API =====
 function promoApi(req, res) {
-  if (req.method === 'OPTIONS') {
-    return reply(res, 204, {});
-  }
+  if (req.method === 'OPTIONS') return reply(res, 204, {});
 
   const url = new URL(req.url, 'http://localhost');
 
@@ -346,7 +321,7 @@ function promoApi(req, res) {
     return referralApi(req, res, url);
   }
 
-  // Запись посещений и открытий кейсов
+  // Сбор статистики
   if (url.pathname === '/api/track' && req.method === 'POST') {
     return readBody(req).then(body => {
       const user = verifyInit(body.initData);
@@ -380,7 +355,6 @@ function promoApi(req, res) {
       }
 
       statsStore.users[user.id] = rec;
-
       statsStore.events.unshift({
         id: user.id,
         name: user.nm,
@@ -403,7 +377,7 @@ function promoApi(req, res) {
     }).catch(e => reply(res, 400, { ok: false, error: e.message }));
   }
 
-  // Вход администратора
+  // Вход в админ-панель
   if (url.pathname === '/api/admin/login' && req.method === 'POST') {
     return readBody(req).then(body => {
       const telegramUser = verifyInit(body.initData);
@@ -433,7 +407,7 @@ function promoApi(req, res) {
     }).catch(e => reply(res, 400, { ok: false, error: e.message }));
   }
 
-  // Все остальные админские запросы требуют авторизации
+  // Все остальные методы админки требуют авторизации
   if (url.pathname.startsWith('/api/admin/')) {
     const admin = getAdmin(req);
 
@@ -444,7 +418,7 @@ function promoApi(req, res) {
       });
     }
 
-    // Статистика
+    // Общая статистика
     if (url.pathname === '/api/admin/stats' && req.method === 'GET') {
       const users = Object.values(statsStore.users || {});
       const now = Date.now();
@@ -488,6 +462,68 @@ function promoApi(req, res) {
       });
     }
 
+    // Поиск игроков
+    if (url.pathname === '/api/admin/players' && req.method === 'GET') {
+      const q = String(url.searchParams.get('q') || '')
+        .trim()
+        .toLowerCase()
+        .slice(0, 100);
+
+      const referrals = referralStore.users || {};
+      const promoUses = {};
+
+      for (const promo of Object.values(promoStore.promos || {})) {
+        for (const id of (promo.users || [])) {
+          promoUses[id] = (promoUses[id] || 0) + 1;
+        }
+      }
+
+      const players = Object.values(statsStore.users || {})
+        .filter(u =>
+          !q ||
+          String(u.id || '').toLowerCase().includes(q) ||
+          String(u.name || '').toLowerCase().includes(q)
+        )
+        .sort((a, b) => (b.lastSeen || 0) - (a.lastSeen || 0))
+        .slice(0, 100)
+        .map(u => {
+          const ref = referrals[u.id] || {};
+
+          return {
+            id: u.id,
+            name: u.name || u.id,
+            firstSeen: u.firstSeen || 0,
+            lastSeen: u.lastSeen || 0,
+            visits: u.visits || 0,
+            caseOpens: u.caseOpens || 0,
+            invited: (ref.invited || []).length,
+            referredBy: ref.referredBy || null,
+            referralRewarded: !!ref.rewarded,
+            promoUses: promoUses[u.id] || 0
+          };
+        });
+
+      return reply(res, 200, {
+        ok: true,
+        players,
+        total: players.length,
+        query: q
+      });
+    }
+
+    // Лента активности
+    if (url.pathname === '/api/admin/events' && req.method === 'GET') {
+      const limit = Math.max(
+        1,
+        Math.min(100, Number(url.searchParams.get('limit')) || 30)
+      );
+
+      return reply(res, 200, {
+        ok: true,
+        events: (statsStore.events || []).slice(0, limit)
+      });
+    }
+
     // Список промокодов
     if (url.pathname === '/api/admin/promos' && req.method === 'GET') {
       const promos = Object.values(promoStore.promos).map(p => ({
@@ -510,11 +546,9 @@ function promoApi(req, res) {
           .replace(/[^A-Z0-9]/g, '')
           .slice(0, 24);
 
-        const rewardType = body.rewardType === 'chest'
-          ? 'chest'
-          : body.rewardType === 'gram'
-            ? 'gram'
-            : '';
+        const rewardType =
+          body.rewardType === 'chest' ? 'chest' :
+          body.rewardType === 'gram' ? 'gram' : '';
 
         const amount = Number(body.amount);
         const limit = Math.floor(Number(body.limit));
@@ -560,7 +594,6 @@ function promoApi(req, res) {
           savePromos();
         } catch (e) {
           delete promoStore.promos[code];
-
           return reply(res, 500, {
             ok: false,
             error: 'Не удалось сохранить промокод'
@@ -590,7 +623,6 @@ function promoApi(req, res) {
           savePromos();
         } catch {
           p.active = true;
-
           return reply(res, 500, {
             ok: false,
             error: 'Не удалось сохранить изменение'
@@ -607,7 +639,7 @@ function promoApi(req, res) {
     });
   }
 
-  // Активация промокода
+  // Активация промокода игроком
   if (url.pathname === '/api/promo/redeem' && req.method === 'POST') {
     return readBody(req).then(body => {
       const user = verifyInit(body.initData);
@@ -655,7 +687,6 @@ function promoApi(req, res) {
         savePromos();
       } catch (e) {
         p.users.pop();
-
         return reply(res, 500, {
           ok: false,
           error: 'Не удалось сохранить активацию. Попробуйте ещё раз.'
@@ -673,7 +704,7 @@ function promoApi(req, res) {
   reply(res, 200, { ok: true, service: 'GiftsUP server' });
 }
 
-// Старые промокоды, которые нельзя создавать повторно
+// Зарезервированные старые промокоды
 const PROMO_CODES_RESERVED = Object.fromEntries([
   '2WT6VJTS','37CQUR6P','3BBF3UVD','3LCKT7VK','3Z33J4HD',
   '439DW7GQ','44C2M996','5FUPDXUZ','5RQ2V8ZL','5VMTQTZA',
@@ -694,7 +725,7 @@ const PROMO_CODES_RESERVED = Object.fromEntries([
   'Z6LJWHMQ','ZUADKUQT'
 ].map(x => [x, true]));
 
-// ===== HTTP И WEBSOCKET =====
+// HTTP API + WebSocket на одном порту
 const httpServer = http.createServer((req, res) => {
   try {
     promoApi(req, res);
@@ -715,24 +746,23 @@ const send = (ws, o) =>
 
 const all = o => clients.forEach(c => send(c, o));
 
-// Реальный онлайн: Telegram-аккаунт считается один раз
-const onlineCount = () =>
-  new Set(
-    [...clients]
-      .filter(c => c.readyState === 1 && c.user && c.user.id)
-      .map(c => c.user.id)
-  ).size;
+// Реальный онлайн: один Telegram-аккаунт считается один раз
+const onlineCount = () => new Set(
+  [...clients]
+    .filter(c => c.readyState === 1 && c.user && c.user.id)
+    .map(c => c.user.id)
+).size;
 
-const pushOnline = () =>
-  all({ t: 'online_count', count: onlineCount() });
+const pushOnline = () => all({
+  t: 'online_count',
+  count: onlineCount()
+});
 
-// Проверка живых соединений
+// Проверка живости соединений
 const heartbeat = setInterval(() => {
   clients.forEach(ws => {
     if (ws.isAlive === false) return ws.terminate();
-
     ws.isAlive = false;
-
     try {
       ws.ping();
     } catch {
@@ -743,16 +773,15 @@ const heartbeat = setInterval(() => {
 
 wss.on('close', () => clearInterval(heartbeat));
 
-const list = () =>
-  round
-    ? [...round.bets.values()].map(b => ({
-        id: b.id,
-        nm: b.nm,
-        bet: b.amount,
-        gb: b.gb,
-        m: b.m
-      }))
-    : [];
+const list = () => round
+  ? [...round.bets.values()].map(b => ({
+      id: b.id,
+      nm: b.nm,
+      bet: b.amount,
+      gb: b.gb,
+      m: b.m
+    }))
+  : [];
 
 let pt = null;
 
@@ -764,11 +793,8 @@ const pushPlayers = () => {
     }, 250);
   }
 };
-
-// ===== РАКЕТКА =====
 function startRound() {
   const seed = crypto.randomBytes(16).toString('hex');
-
   round = {
     seed,
     hash: sha(seed),
@@ -778,39 +804,21 @@ function startRound() {
     startAt: Date.now() + WAIT_MS
   };
 
-  all({
-    t: 'wait',
-    hash: round.hash,
-    startAt: round.startAt
-  });
-
+  all({ t: 'wait', hash: round.hash, startAt: round.startAt });
   setTimeout(fly, WAIT_MS);
 }
 
 function fly() {
   round.phase = 'fly';
   round.flyAt = Date.now();
-
-  all({
-    t: 'fly',
-    startAt: round.flyAt
-  });
-
+  all({ t: 'fly', startAt: round.flyAt });
   setTimeout(crash, Math.log(round.point) / SPEED * 1000);
 }
 
 function crash() {
   round.phase = 'crash';
-
   hist = [round.point, ...hist].slice(0, 14);
-
-  all({
-    t: 'crash',
-    point: round.point,
-    seed: round.seed,
-    hist
-  });
-
+  all({ t: 'crash', point: round.point, seed: round.seed, hist });
   setTimeout(startRound, PAUSE_MS);
 }
 
@@ -837,13 +845,12 @@ const A = {
   winner: null
 };
 
-const arList = () =>
-  [...A.bets.values()].map(b => ({
-    id: b.id,
-    nm: b.nm,
-    bet: b.bet,
-    c: b.c
-  }));
+const arList = () => [...A.bets.values()].map(b => ({
+  id: b.id,
+  nm: b.nm,
+  bet: b.bet,
+  c: b.c
+}));
 
 const arState = () => ({
   t: 'ar_state',
@@ -863,11 +870,7 @@ const arPush = () => {
   if (!apt) {
     apt = setTimeout(() => {
       apt = null;
-      all({
-        t: 'ar_players',
-        jp: A.jp,
-        list: arList()
-      });
+      all({ t: 'ar_players', jp: A.jp, list: arList() });
     }, 250);
   }
 };
@@ -882,20 +885,17 @@ function arStart() {
   A.off = Math.random() * 4;
   A.end = 0;
 
-  // Таймер ставок начинается после ставок двух игроков
+  // Таймер ставок начинается после ставок двух разных игроков.
   all(arState());
 }
 
 function arClose() {
   if (A.bets.size < 2) {
-    // Если остался один игрок, возвращаем ставку
+    // Если игрок только один — возвращаем его ставку.
     for (const b of A.bets.values()) {
       clients.forEach(c => {
         if (c.user.id === b.id) {
-          send(c, {
-            t: 'ar_refund',
-            amount: b.bet
-          });
+          send(c, { t: 'ar_refund', amount: b.bet });
         }
       });
     }
@@ -905,17 +905,16 @@ function arClose() {
 
   const list = arList();
   const pot = list.reduce((a, p) => a + p.bet, 0);
-
-  const r =
-    parseInt(sha(A.seed + ':arena').slice(0, 13), 16) /
-    2 ** 52 * pot;
+  const r = parseInt(
+    sha(A.seed + ':arena').slice(0, 13),
+    16
+  ) / 2 ** 52 * pot;
 
   let acc = 0;
   let w = list[list.length - 1];
 
   for (const p of list) {
     acc += p.bet;
-
     if (r < acc) {
       w = p;
       break;
@@ -935,9 +934,7 @@ function arClose() {
     seed: A.seed
   });
 
-  if (A.n % 100 === 0) {
-    A.jp = 0;
-  }
+  if (A.n % 100 === 0) A.jp = 0;
 
   setTimeout(arStart, AR_SPIN + AR_RES);
 }
@@ -992,7 +989,7 @@ function arBet(ws, m) {
 
   b.bet = Math.round((b.bet + a) * 100) / 100;
 
-  // 30 секунд на ставки после появления двух разных игроков
+  // 30 секунд на ставки после появления второго игрока.
   if (A.bets.size >= 2 && A.end === 0) {
     A.end = Date.now() + AR_BET;
     all(arState());
@@ -1011,13 +1008,9 @@ wss.on('connection', ws => {
   ws.user.nm = 'Guest_' + ws.user.id.slice(1, 5);
 
   ws.msgs = 0;
-
-  const rl = setInterval(() => {
-    ws.msgs = 0;
-  }, 1000);
+  const rl = setInterval(() => ws.msgs = 0, 1000);
 
   ws.isAlive = true;
-
   ws.on('pong', () => {
     ws.isAlive = true;
   });
@@ -1059,7 +1052,6 @@ wss.on('connection', ws => {
     if (++ws.msgs > 20) return;
 
     let m;
-
     try {
       m = JSON.parse(raw);
     } catch {
@@ -1080,7 +1072,6 @@ wss.on('connection', ws => {
       const u = verifyInit(m.initData);
 
       if (u) {
-        // Один Telegram-аккаунт — одно активное подключение
         clients.forEach(c => {
           if (c !== ws && c.user.id === u.id) {
             c.close();
@@ -1110,10 +1101,7 @@ wss.on('connection', ws => {
         });
       }
 
-      if (
-        round.bets.has(id) ||
-        !(a >= MIN_BET && a <= MAX_BET)
-      ) {
+      if (round.bets.has(id) || !(a >= MIN_BET && a <= MAX_BET)) {
         return send(ws, {
           t: 'err',
           refund: 1,
